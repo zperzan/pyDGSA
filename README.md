@@ -11,7 +11,7 @@ pip install pyDGSA
 ```
 
 ## Usage
-Please see the `tutorial_short.ipynb` and `tutorial_long.ipynb` Jupyter notebooks in the [pyDDGSA GitHub repository](https://github.com/zperzan/pyDGSA) for detailed usage examples.
+Please see the `tutorial_short.ipynb` and `tutorial_long.ipynb` Jupyter notebooks in the [pyDGSA GitHub repository](https://github.com/zperzan/pyDGSA) for detailed usage examples.
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

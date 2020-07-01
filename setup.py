@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pyDGSA", 
-    version="1.0.0",
+    version="1.0.1",
     author="Zach Perzan",
     author_email="zperzan@stanford.edu",
     description="Python implementation of distance-based generalized sensitivity analysis (DGSA)",
