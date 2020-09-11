@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="pyDGSA", 
-    version="1.0.1",
+    version="1.0.2",
     author="Zach Perzan",
     author_email="zperzan@stanford.edu",
     description="Python implementation of distance-based generalized sensitivity analysis (DGSA)",
@@ -19,12 +19,13 @@ setup(
         'matplotlib',
         'pandas',
         'tqdm',
+        'scikit-learn'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU General Public License (GPL)"
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     include_package_data=True,
     zip_safe=False,
 )

@@ -4,8 +4,12 @@
 pyDGSA sub-package that provides useful utilities for plotting dgsa results
 
 This file includes:
+reformat_interactions
 vert_pareto_plot
 plot_cdf
+calc_bubble_distances
+bubble_plot
+interaction_matrix
 """
 
 
@@ -13,9 +17,29 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import matplotlib
-from matplotlib.colors import to_rgba
+from sklearn.manifold import MDS
 
-def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
+def reformat_interactions(df):
+    """Given a dataframe with columns 'k1 | k2', output a dataframe with
+    main parameters as the columns and conditional parameters as the rows."""
+    
+    for i, interaction in enumerate(df.index.tolist()):
+        main_param = interaction.split('|')[0].strip()
+        cond_param = interaction.split('|')[1].strip()
+
+        if i == 0:
+            int_df = pd.DataFrame(index=[main_param], columns=[cond_param], 
+                                  dtype='float64')
+        int_df.loc[cond_param, main_param] = df.loc[interaction, 'sensitivity']
+       
+    # Sort df before returning it
+    int_df.sort_index(axis=0, inplace=True)
+    int_df.sort_index(axis=1, inplace=True)
+    
+    return int_df
+
+
+def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
     """Generate a vertical Pareto plot of sensitivity analysis results.
     
     params:
@@ -34,15 +58,17 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
                          display a single bar per param
                 -'max': same as 'mean'
                 -'cluster_avg': cluster-specific sensitivities were passed, so
-                            display each cluster's sensitivity separately
+                            display cluster's sensitivity separately
                 -'bin_avg': bin-specific sensitivities were passed, so display
                             each bin's sensitivity separately
                 -'indiv': plots the sensitivity for each bin/cluster combination
                         separately
+        confidence [bool]: whether or not to plot confidence bars. Default is False, 
+                but must be included in df if confidence == True.
         colors [list(str|int)]: list of clusters colors to use when plotting, 
                 either specified as rgba tuples or strings of matplotlib named 
                 colors. Only used when fmt='cluster_avg' or 'indiv'
-    
+   
     returns:
         fig: matplotlib figure handle
         ax: matplotlib axis handle
@@ -55,7 +81,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
     if fmt is None:
         if isinstance(df.columns, pd.MultiIndex):
             fmt = 'indiv'
-        elif df.shape[1] > 1:
+        elif df.shape[1] > 1 and 'confidence' not in df.columns:
             # Could be either 'cluster_avg' or 'bin_avg'
             if 'Cluster' in df.columns[0]:
                 fmt = 'cluster_avg'
@@ -64,7 +90,12 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
             else:
                 raise ValueError("Could not determine fmt. Please pass explicitly.")
         else:
+            # Note that 'mean' also includes 'max' format from the analysis
             fmt = 'mean'
+            if 'confidence' in df.columns:
+                cdf = df['confidence'].copy()
+                # copy to avoid altering input df
+                df = df.drop('confidence', axis=1).copy() 
     
     if fmt == 'indiv' and colors is not None:
         if isinstance(colors[0], str):
@@ -72,8 +103,16 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
             named_colors = colors
             colors=[]
             for color in named_colors:
-                colors.append(to_rgba(color))
-    
+                colors.append(matplotlib.colors.to_rgba(color))
+        
+    if fmt == 'cluster_avg':
+        # Check if confidence bounds were provided by counting 
+        # columns that end with "_conf"
+        conf_cols = [col for col in df.columns if col[-5:] == '_conf']
+        if len(conf_cols) > 0:
+            cdf = df[conf_cols].copy()
+            df = df.drop(conf_cols, axis=1).copy()
+            
     # Get number of parameters with sensitivity >= 1
     np_sensitive = np.any((df.fillna(0).values >= 1), axis=1).sum()
 
@@ -103,23 +142,36 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
         
         yticks = y_pos 
 
-        # Initialize colors as red unless there are no sensitive parameters,
-        # in which case initialize as blue
-        if np_sensitive > 0:
-            colors = np.asarray([[1, 0, 0, 0.8]]*np_max_plot)
+        # Error bars (confidence interval); by default these are plotted, but of 
+        # length 0 if confidence == False
+        if confidence:
+            xerr = cdf[df.index[:np_max_plot]].values/2
         else:
-            colors = np.asarray([[0, 0, 1, 0.8]]*np_max_plot)
+            xerr = 0
 
-        if np_max_plot > np_sensitive:
+        # Values are color-coded. If confidence intervals are provided
+        if confidence:
+            colors = np.asarray([[1, 1, 1, 0.8]]*np_max_plot)
+            # > confidence interval red
+            colors[data - xerr > 1] = [1, 0, 0, 0.8]
+            # < confidence interval blue
+            colors[data + xerr < 1] = [0, 0, 1, 0.8]
+        else:
             if np_sensitive > 0:
-                colors[np_sensitive] = [1, 1, 1, 1]
-            colors[np_sensitive+1:] = [0, 0, 1, 0.8] 
+                colors = np.asarray([[1, 0, 0, 0.8]]*np_max_plot)
+            else:
+                colors = np.asarray([[0, 0, 1, 0.8]]*np_max_plot)
+
+            if np_max_plot > np_sensitive:
+                if np_sensitive > 0:
+                    colors[np_sensitive] = [1, 1, 1, 1]
+                colors[np_sensitive+1:] = [0, 0, 1, 0.8] 
 
         fig_height = int(np_max_plot/2)
         
         # Create figure and add barh
         fig, ax = plt.subplots(figsize=(5, fig_height))
-        ax.barh(y_pos, data, color=colors, edgecolor='k')
+        ax.barh(y_pos, data, color=colors, edgecolor='k', xerr=xerr)
 
     elif fmt == 'cluster_avg':
         n_clusters = df.shape[1]
@@ -128,6 +180,12 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
         sort_df = df.mean(axis=1).sort_values(ascending=False)
         df = df.reindex(sort_df.index)
         params = df.index.tolist() # Get list of params after sorting
+        
+        # Add error bars if confidence=True, otherwise set length to 0
+        if confidence:
+            xerr = cdf.loc[df.index, :].values
+        else:
+            xerr = cdf.loc[df.index, :].values*0
         
         height = 1/(n_clusters+1)
         yticks = y_pos - (height*(n_clusters-1)/2)
@@ -145,7 +203,8 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
         # Add bars for each cluster
         for i in range(n_clusters):
             ax.barh(y_pos - height*i, df.iloc[:np_max_plot, i], height=height, 
-                    color=colors[i], edgecolor='k', label=df.columns.tolist()[i])
+                    color=colors[i], edgecolor='k', label=df.columns.tolist()[i],
+                    xerr=xerr[:np_max_plot, i])
         ax.legend()
         
     elif fmt == 'bin_avg':
@@ -255,6 +314,125 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None):
     ax.xaxis.tick_top()
     ax.xaxis.set_label_position('top')
         
+    return fig, ax
+
+
+def calc_bubble_distances(int_df):
+    """Given a dataframe of asymmetric interactions, calculate 
+    the symmetric distance for a bubble plot, as proposed by Park 
+    et al. (2016)"""
+
+    ref_df = reformat_interactions(int_df)
+    sym_df = ref_df.copy()
+
+    # Drop main_params that are not in cond_params
+    for main_param in ref_df.columns:
+        if main_param not in ref_df.index:
+            sym_df.drop(main_param, axis=1, inplace=True)
+
+
+    for cond_param in sym_df.index:
+        for main_param in sym_df.columns:
+            if main_param == cond_param:
+                sym_df.loc[cond_param, main_param] = 0
+            else:
+                int1 = ref_df.loc[cond_param, main_param]
+                int2 = ref_df.loc[main_param, cond_param]
+                sym_df.loc[cond_param, main_param] = 2/(int1 + int2)
+                
+    return sym_df
+         
+         
+def bubble_plot(main_df, int_df, figsize=(5,5)):
+    
+    sym_df = calc_bubble_distances(int_df)
+    
+    # Calculate MDS coordinates of the 
+    mds = MDS(n_components=2, dissimilarity='precomputed', random_state=0)
+    mds_dist = mds.fit_transform(sym_df.values)
+
+    fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+
+    x = mds_dist[:, 0]
+    y = mds_dist[:, 1]
+    sizes = main_df.loc[sym_df.index, 'sensitivity']*1000
+    colors = []
+    for sens in main_df.loc[sym_df.index, 'sensitivity']:
+        if sens > 1:
+            colors.append('red')
+        else:
+            colors.append('blue')
+
+    sc = ax.scatter(x, y, s=sizes, c=colors, alpha=0.5)
+
+    for i, label in enumerate(sym_df.index):
+        ax.annotate(label, (x[i], y[i]))
+
+    # Remove tick labels
+    ax.set(yticklabels=[], xticklabels=[])
+
+    return fig, ax
+
+
+def interaction_matrix(df, figsize=(5,5), fontsize=12, nan_color='gray'):
+    """Given a dataframe of asymmetric sensitivities, plot a color-coded 
+    matrix of those sensitivities.
+    
+    params:
+        df [DataFrame]: pandas dataframe containing the sensitivity analysis
+                results. 
+        figsize [tuple(float)]: matplotlib figure size in inches. Optional, 
+                default: (5,5)
+        fontsize [tuple(float)]: font size for the text values in the matrix. 
+                Optional, default: 12
+        nan_color [str]: a matplotlib named color for displaying NaN values
+        
+    returns:
+        fig: matplotlib figure handle
+        ax: matplotlib axis handle
+    """
+    int_df = reformat_interactions(df)
+    main_params = int_df.columns.tolist()
+    cond_params = int_df.index.tolist()
+
+    # Separate out sensitive and insensitive parameters
+    # and plot using separate color ramps
+    mask = int_df.values > 1
+
+    sens = int_df.values.copy()
+    insens = int_df.values.copy()
+    sens[~mask] = np.nan
+    insens[mask] = np.nan
+
+    # Create separate array of NaN's as nan_color
+    nan_rgb = matplotlib.colors.to_rgba(nan_color) # convert str to rgb values
+    nancells = np.tile(int_df.values.copy(), (4,1,1))
+
+    # Swap all NaN's to RGBA and everything else to 0
+    nancells[~np.isnan(nancells)] = 0
+    for i, cvalue in enumerate(nan_rgb):
+        nancells[i, np.isnan(nancells[i, :, :])] = cvalue
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.imshow(insens, vmin=0, vmax=1.3, cmap='Blues', interpolation='none')
+    ax.imshow(sens, vmin=0.7, vmax=sens.max(), cmap='Reds', interpolation='none')
+    ax.imshow(nancells.swapaxes(0,2).swapaxes(0,1))
+
+    ax.set(xticks=range(len(main_params)), xticklabels=main_params,
+           yticks=range(len(cond_params)), yticklabels=cond_params)
+
+    for i, main_param in enumerate(main_params):
+        for j, cond_param in enumerate(cond_params):
+            value = int_df.loc[cond_param, main_param]
+            if not np.isnan(value):
+                text = '%0.2f' % value
+                ax.text(i, j, text, fontsize=fontsize,
+                        horizontalalignment='center', verticalalignment='center')
+    
+    # Label axes
+    ax.set(xlabel='Main parameter', ylabel='Cond. parameter')
+    
     return fig, ax
 
 

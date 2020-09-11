@@ -44,7 +44,7 @@ def cluster_cdf_distance(prior_cdf, cluster_parameters, percentiles=None):
 
 
 def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95, 
-         output='mean', cluster_names=None):
+         output='mean', cluster_names=None, confidence=False):
     """Given a parameter set and clustered model responses, calculate the 
     normalized model sensitivity to each parameters, without interactions.
     
@@ -58,6 +58,8 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
         n_boots [int]: number of bootstrapped datasets to create. Default: 3000
         quantile [float]: quantile used to test the null hypothesis. Can specify 
                 as a percentile [0-100] or quantile [0-1]. Default: 0.95
+        confidence [bool]: whether to output confidence intervals on the standardized
+                sensitivity measure, following Park et al. (2015). 
         output [str]: whether to return the mean standardized sensitivity across 
                 clusters ('mean'), the max sensitivity across clusters ('max'), or 
                 the standardized sensitivity for each cluster ('cluster_avg').
@@ -141,26 +143,58 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
     # Calculate the normalized distances (d/d_95)
     cluster_sensitivities = cluster_distances/boot_quantiles
 
+    # Calculate the confidence interval, if requested
+    if confidence:
+        dist_upper = np.quantile(boot_distances, 1, axis=0)
+        dist_lower = np.quantile(boot_distances, quantile - (1-quantile),
+                                  axis=0)
+        upper_bound = cluster_distances/dist_upper
+        lower_bound = cluster_distances/dist_lower
+        
     # Output as a dataframe
     if output == 'mean':
-        df = pd.DataFrame(np.mean(cluster_sensitivities, axis=0), 
-                          index=parameter_names, columns=['sensitivity'])
+        columns = ['sensitivity']
+        data = np.mean(cluster_sensitivities, axis=0)
+        
+        if confidence:
+            conf = np.mean(lower_bound - upper_bound, axis=0)
+            columns.append('confidence')
+            data = np.column_stack((data, conf))
+
+        df = pd.DataFrame(data, index=parameter_names, columns=columns)
+
     elif output == 'max':
-        df = pd.DataFrame(np.max(cluster_sensitivities, axis=0), 
-                         index=parameter_names, columns=['sensitivity'])
+        columns = ['sensitivity']
+        data = np.max(cluster_sensitivities, axis=0)
+        
+        if confidence:
+            conf = np.max(lower_bound - upper_bound, axis=0)
+            columns.append('confidence')
+            data = np.column_stack((data, conf))
+            
+        df = pd.DataFrame(data, index=parameter_names, columns=columns)
+        
     elif output == 'cluster_avg':
         if cluster_names is None:
             cluster_names = ['Cluster ' + str(i) for i in range(n_clusters)]
-            
-        df = pd.DataFrame(cluster_sensitivities.T, index=parameter_names, 
-                          columns=cluster_names)
+        columns = cluster_names.copy()
+        
+        data = cluster_sensitivities.T
+        
+        if confidence:
+            conf = lower_bound.T - upper_bound.T
+            for i, cluster in enumerate(cluster_names):
+                columns.insert(2*i + 1, cluster + '_conf')
+                data = np.insert(data, 2*i + 1, conf[:, i], axis=1)
+        
+        df = pd.DataFrame(data, index=parameter_names, columns=columns)
 
     return df
 
 
 def dgsa_interactions(parameters, labels, cond_parameters=None, n_bins=3, 
                       parameter_names=None, quantile=0.95, n_boots=3000,
-                      output='mean', cluster_names=None):
+                      output='mean', confidence=False, cluster_names=None):
     """Given a parameter set, clustered model responses, and a list of 
     conditional parameters, calculate the sensitivity of each two-way 
     parameter interaction.
