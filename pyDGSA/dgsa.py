@@ -93,7 +93,7 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
         if len(cluster) < 10:
             print("Warning: \
                   Cluster {} contains {} models. \
-                  Recommend >=10 models per cluster for optimal performance.".format(key, 
+                  Recommend >=10 models per cluster for optimal performance.".format(nc, 
                                                                         len(cluster)))
     
     ### Step 1. 

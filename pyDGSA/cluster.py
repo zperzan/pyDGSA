@@ -8,6 +8,7 @@ David Zhen Yin, Aug 2019
 
 Updated: 
 Zach Perzan, June 2020
+Zach Perzan, Mar 2023
 """
 
 import numpy as np
@@ -139,4 +140,4 @@ class KMedoids(object):
         for i in range(self.n_clusters):
             labels[clst_membr_ids[i]] = i
 
-        return labels
+        return labels, self.cluster_centers_

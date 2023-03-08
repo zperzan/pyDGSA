@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 from sklearn.manifold import MDS
+from scipy.stats import gaussian_kde
 
 def reformat_interactions(df):
     """Given a dataframe with columns 'k1 | k2', output a dataframe with
@@ -39,7 +40,8 @@ def reformat_interactions(df):
     return int_df
 
 
-def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
+def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
+                     figsize=None):
     """Generate a vertical Pareto plot of sensitivity analysis results.
     
     params:
@@ -167,10 +169,12 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
                     colors[np_sensitive] = [1, 1, 1, 1]
                 colors[np_sensitive+1:] = [0, 0, 1, 0.8] 
 
-        fig_height = int(np_max_plot/2)
-        
+        if figsize is None:
+            fig_height = int(np_max_plot/2)
+            figsize = (5, fig_height)
+
         # Create figure and add barh
-        fig, ax = plt.subplots(figsize=(5, fig_height))
+        fig, ax = plt.subplots(figsize=figsize)
         ax.barh(y_pos, data, color=colors, edgecolor='k', xerr=xerr)
 
     elif fmt == 'cluster_avg':
@@ -185,7 +189,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
         if confidence:
             xerr = cdf.loc[df.index, :].values
         else:
-            xerr = cdf.loc[df.index, :].values*0
+            xerr = df.loc[df.index, :].values*0
         
         height = 1/(n_clusters+1)
         yticks = y_pos - (height*(n_clusters-1)/2)
@@ -197,8 +201,11 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
                 colors.append(cmap(i))
 
         # Create figure
-        fig_height = int(np_max_plot/2*1.5)
-        fig, ax = plt.subplots(figsize=(5, fig_height))
+        if figsize is None:
+            fig_height = int(np_max_plot/2*1.5)
+            figsize = (5, fig_height)
+            
+        fig, ax = plt.subplots(figsize=figsize)
 
         # Add bars for each cluster
         for i in range(n_clusters):
@@ -226,8 +233,11 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
         for i in range(n_bins):
             color_array[i, 3] = (i+1)/(n_bins)
 
-        fig_height = int(np_max_plot/2*1.5)
-        fig, ax = plt.subplots(figsize=(5, fig_height))
+        if figsize is None:
+            fig_height = int(np_max_plot/2*1.5)
+            figsize = (5, fig_height)
+            
+        fig, ax = plt.subplots(figsize=figsize)
 
         for i in range(n_bins):
             width = df.iloc[:np_max_plot, i]
@@ -314,6 +324,117 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False):
     ax.xaxis.tick_top()
     ax.xaxis.set_label_position('top')
         
+    return fig, ax
+
+def get_param_idx(parameter, parameter_names, n_parameters):
+    """Regardless of format given, get the index of a specific parameter,
+    with error checking."""
+    
+    # If parameter is given as string, look for it in parameter_names
+    if isinstance(parameter, str):
+        if parameter_names is None:
+            raise ValueError('Must provide list of parameter names if providing \
+                parameter to plot as a string.')
+        elif parameter not in parameter_names:
+            raise ValueError('Could not find %s in parameter_names' % parameter)
+        else:
+            param_idx = parameter_names.index(parameter)
+            
+    elif isinstance(parameter, int):
+        if parameter > (n_parameters - 1):
+            raise ValueError('Parameter index passed (%s) is greater than the \
+                             length of parameter_names' % parameter)
+        else:
+            param_idx = parameter
+            
+    return param_idx
+
+
+def plot_interact_cdf(parameters, labels, main_param, cond_param, cluster_names=None, 
+                      colors=None, figsize=(12,5), parameter_names=None, n_bins=3,
+                      bin_labels=None, plot_prior=True):
+ 
+    # Check input
+    n_clusters = labels.max() + 1
+    n_parameters = parameters.shape[1]
+
+    if colors is None:
+        colors = []
+        cmap = matplotlib.cm.get_cmap('Set1')
+        for i in range(n_clusters):
+            colors.append(cmap(i))
+
+    # Create color array by decreasing alpha channel for each bin
+    color_array = np.zeros((n_clusters, n_bins, 4), dtype='float64')
+    for i in range(n_clusters):
+        for j in range(n_bins):
+            color_array[i, j, :] = colors[i]
+            color_array[i, j, 3] = (j+1)/(n_bins)
+
+    if cluster_names is None:
+        cluster_names = ['Cluster %s' %i for i in range(n_clusters)]
+
+    if bin_labels is None:
+        bin_labels = ['Bin %s' %i for i in n_bins]
+
+    # Calculate the thresholds separating bins for each parameter
+    # thresholds is of shape (n_bins, n_parameters)
+    thresholds = np.quantile(parameters, [b/n_bins for b in range(1, n_bins)], 
+                             axis=0)
+
+    # Get the indices of the main and cond params
+    mpidx = get_param_idx(main_param, parameter_names, n_parameters)
+    cpidx = get_param_idx(cond_param, parameter_names, n_parameters)
+
+    if parameter_names is None:
+        parameter_names = ['Parameter %s' %i for i in range(n_parameters)]
+
+    percentiles = np.arange(1, 100)
+
+    fig, ax = plt.subplots(1, n_clusters, figsize=figsize, tight_layout=True, sharey=True)
+
+    for nc in range(n_clusters):
+        c_idx = np.where(labels==nc)
+        q_prior = np.percentile(parameters[c_idx, mpidx], percentiles)
+        if plot_prior:
+            ax[nc].plot(np.percentile(parameters[:,mpidx], percentiles), 
+                        percentiles, color='k', linestyle='--', label='$F$ ($X_i$)')
+        ax[nc].plot(q_prior, percentiles, color=color_array[nc, -2], linestyle=':', 
+                    label='$F$ ($X_i$ | %s)' % cluster_names[nc])
+
+        for nb in range(n_bins): 
+            # For each bin, first calc b_mask -- mask of params within each bin    
+            # The first bin
+            if nb == 0: 
+                threshold = thresholds[nb, cpidx]
+                b_mask = parameters[:, cpidx] <= threshold
+            # The last bin
+            elif nb == (n_bins - 1): 
+                threshold = thresholds[-1, cpidx]
+                b_mask = parameters[:, cpidx] > threshold
+            # Middle bins
+            else: 
+                low_thresh = thresholds[nb - 1, cpidx]
+                high_thresh = thresholds[nb, cpidx]
+                b_mask = (parameters[:, cpidx] > low_thresh) & \
+                         (parameters[:, cpidx] <= high_thresh)
+
+            # Indices comprising this bin
+            b_idx = np.argwhere(b_mask) 
+
+            # Indices within this cluster AND bin
+            bc_idx = np.intersect1d(c_idx, b_idx.flatten(), assume_unique=True) 
+            if len(bc_idx) > 2:
+                q_inter = np.percentile(parameters[bc_idx, mpidx], percentiles, axis=0)
+                label = '$F$ ($X_i$ | %s, %s)' % (cluster_names[nc], bin_labels[nb])
+                ax[nc].plot(q_inter, percentiles, label=label, 
+                            color=color_array[nc, nb])
+
+        ax[nc].set(xlim=[parameters[:, mpidx].min(), parameters[:, mpidx].max()],
+                  xlabel=parameter_names[mpidx], title=cluster_names[nc])
+        ax[nc].legend()
+    ax[0].set(ylabel='% of simulations')
+
     return fig, ax
 
 
@@ -415,12 +536,18 @@ def interaction_matrix(df, figsize=(5,5), fontsize=12, nan_color='gray'):
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.imshow(insens, vmin=0, vmax=1.3, cmap='Blues', interpolation='none')
-    ax.imshow(sens, vmin=0.7, vmax=sens.max(), cmap='Reds', interpolation='none')
+    ax.imshow(insens, vmin=0, vmax=1.3, 
+              cmap='Blues', interpolation='none')
+    if not np.all(np.isnan(sens)):
+        ax.imshow(sens, vmin=0.7, vmax=np.nanmax(sens)*1.5, 
+                  cmap='Reds', interpolation='none')
     ax.imshow(nancells.swapaxes(0,2).swapaxes(0,1))
 
-    ax.set(xticks=range(len(main_params)), xticklabels=main_params,
-           yticks=range(len(cond_params)), yticklabels=cond_params)
+    ax.set(xticks=range(len(main_params)), yticks=range(len(cond_params)), 
+           yticklabels=cond_params)
+    
+    # Add rotated xtick labels
+    ax.set_xticklabels(labels=main_params, rotation=90)
 
     for i, main_param in enumerate(main_params):
         for j, cond_param in enumerate(cond_params):
@@ -437,7 +564,8 @@ def interaction_matrix(df, figsize=(5,5), fontsize=12, nan_color='gray'):
 
 
 def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None, 
-             figsize=(5,5), parameter_names=None, legend_names=None):
+             figsize=(5,5), parameter_names=None, legend_names=None,
+             plot_prior=False):
     """Plot the class-conditional cdf for a single parameter.
     
     params:
@@ -504,11 +632,16 @@ def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
 
     fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
 
+    if plot_prior:
+        ax.plot(np.percentile(parameters[:, param_idx], percentiles), 
+                    percentiles, color='k', linestyle='--', label='$F$ ($X_i$)')
+
     for i in range(n_clusters):
         x = np.percentile(parameters[np.where(labels==i), param_idx], percentiles)
-        ax.plot(x, percentiles, color=colors[i], label=cluster_names[i])
+        ax.plot(x, percentiles, color=colors[i], 
+                label='$F$ ($X_i$ | %s)' % cluster_names[i])
 
-    ax.set(xlabel=parameter_names[param_idx], ylabel='Percentile')
+    ax.set(xlabel=parameter_names[param_idx], ylabel='% of simulations')
 
     # If legend_names is provided, sort the handles before adding legend
     if legend_names is None:
@@ -517,7 +650,123 @@ def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
         handles, legend_labels = ax.get_legend_handles_labels()
         reordered_handles = []
         for name in legend_names:
-            idx = legend_labels.index(name)
+            idx = legend_labels.index('$F$ ($X_i$ | %s)' % name)
+            reordered_handles.append(handles[idx])
+
+        ax.legend(reordered_handles, legend_names)
+
+    return fig, ax
+
+
+def plot_pdf(parameters, labels, parameter, cluster_names=None, colors=None,
+             figsize=(5,5), parameter_names=None, legend_names=None,
+             plot_prior=False, models_per_bin=5, **kwargs):
+    """Plot the class-conditional pdf for a single parameter.
+
+    params:
+        parameters [array(float)]: array of shape (n_parameters, n_simulations)
+                containing the parameter sets used for each model run
+        labels [array(int)]: array of length n_simulations where each value
+                represents the cluster to which that model belongs
+        parameter [int]: index of the parameter to plot, corresponding to a
+                column within `parameters`
+        cluster_names [list(str)]: ordered list of cluster names corresponding
+                to the label array, ie the 0th element of cluster_names is the
+                name of the cluster where labels==0. Optional, default is
+                ['Cluster 0', 'Cluster 1', ...]
+        colors [list]: colors to plot
+        figsize [tuple(float)]: matplotlib figure size in inches. Optional,
+                default: (5,5)
+        parameter_name [str]: name of the parameter as listed on the x-axis
+                label. Optional, defaults to 'Parameter #'
+        legend_names [list(str)]: ordered list of names to display in the
+                legend. Optional, but must be a permuted version of
+                cluster_names.
+        models_per_bin [int]: this defines the spacing of the x-values in
+                the pdf plot. A larger number means larger bins, which means
+                lower resolution along the x-axis. Optional, default: 5
+        **kwargs: keyword arguments to pass to scipy.stats.gaussian_kde
+
+
+    returns:
+        fig: matplotlib figure handle
+        ax: matplotlib axis handle
+    """
+
+    # Check input
+    n_clusters = labels.max() + 1
+    n_parameters = parameters.shape[1]
+
+    if colors is None:
+        colors = []
+        cmap = matplotlib.cm.get_cmap('Set1')
+        for i in range(n_clusters):
+            colors.append(cmap(i))
+
+    if cluster_names is None:
+        cluster_names = ['Cluster %s' %i for i in range(n_clusters)]
+
+    # If parameter is given as string, look for it in parameter_names
+    if isinstance(parameter, str):
+        if parameter_names is None:
+            raise ValueError('Must provide list of parameter names if providing \
+                parameter to plot as a string.')
+        elif parameter not in parameter_names:
+            raise ValueError('Could not find %s in parameter_names' % parameter)
+        else:
+            param_idx = parameter_names.index(parameter)
+
+    elif isinstance(parameter, int):
+        if parameter > (n_parameters - 1):
+            raise ValueError('Parameter index passed (%s) is greater than the \
+                             length of parameter_names' % parameter)
+        else:
+            param_idx = parameter
+
+    # Get list of parameters (used for labeling with full col name)
+    if parameter_names is None:
+        parameter_names = ['Parameter %s' %i for i in range(n_parameters)]
+
+    fig, ax = plt.subplots(figsize=figsize, tight_layout=True, facecolor='white')
+
+    if plot_prior:
+        n = int(labels.shape[0]/models_per_bin)
+        pmin = parameters[:, param_idx].min()
+        pmax = parameters[:, param_idx].max()
+        prange = pmax - pmin
+        pmin -= prange*0.2
+        pmax += prange*0.2
+        x = np.linspace(pmin, pmax, n)
+        kernel = gaussian_kde(parameters[:, param_idx].flatten(), **kwargs)
+        pdf = kernel(x)
+        ax.fill_between(x, 0, pdf, alpha=0.6, label='$f$ ($X_i$)', color='k', zorder=1)
+        ax.plot(x, pdf, color='k', alpha=0.8, zorder=1)
+
+    for i in range(n_clusters):
+        n = int((labels == i).sum()/models_per_bin)
+        label = '$f$ ($X_i$ | %s)' % cluster_names[i]
+        pmin = parameters[np.where(labels==i), param_idx].min()
+        pmax = parameters[np.where(labels==i), param_idx].max()
+        prange = pmax - pmin
+        pmin -= prange*0.2
+        pmax += prange*0.2
+        x = np.linspace(pmin, pmax, n)
+        kernel = gaussian_kde(parameters[np.where(labels==i), param_idx].flatten(), **kwargs)
+        pdf = kernel(x)
+
+        ax.fill_between(x, 0, pdf, alpha=0.6, label=label, color=colors[i], zorder=1+((i+1)/n_clusters))
+        ax.plot(x, pdf, color=colors[i], alpha=0.8, zorder=1.05+((i+1)/n_clusters))
+
+    ax.set(xlabel=parameter_names[param_idx], ylabel='Density')
+
+    # If legend_names is provided, sort the handles before adding legend
+    if legend_names is None:
+        ax.legend()
+    else:
+        handles, legend_labels = ax.get_legend_handles_labels()
+        reordered_handles = []
+        for name in legend_names:
+            idx = legend_labels.index('$F$ ($X_i$ | %s)' % name)
             reordered_handles.append(handles[idx])
 
         ax.legend(reordered_handles, legend_names)
