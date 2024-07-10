@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "pyDGSA"
+version = "1.0.4"
+description = "Python implementation of distance-based generalized sensitivity analysis (DGSA)"
+authors = ["zperzan <zach.perzan@unlv.edu>"]
+license = "GPL-3.0-or-later"
+readme = "README.md"
+packages = [
+    {include = "pyDGSA"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = "^1.19.5"
+matplotlib = "^3.4.3"
+tqdm = "^4.55.2"
+scikit-learn = "^1.1.3"
+pandas = "^1.1.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
