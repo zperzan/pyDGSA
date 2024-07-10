@@ -65,7 +65,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
                             each bin's sensitivity separately
                 -'indiv': plots the sensitivity for each bin/cluster combination
                         separately
-        confidence [bool]: whether or not to plot confidence bars. Default is False, 
+        confidence [bool]: whether to plot confidence bars. Default is False,
                 but must be included in df if confidence == True.
         colors [list(str|int)]: list of clusters colors to use when plotting, 
                 either specified as rgba tuples or strings of matplotlib named 
@@ -75,10 +75,10 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         fig: matplotlib figure handle
         ax: matplotlib axis handle
     """
-    
+
     # Total np (number of parameters)
-    np_total = df.shape[0] 
-    
+    np_total = df.shape[0]
+
     # Figure out fmt if not explicitly provided
     if fmt is None:
         if isinstance(df.columns, pd.MultiIndex):
@@ -97,8 +97,8 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
             if 'confidence' in df.columns:
                 cdf = df['confidence'].copy()
                 # copy to avoid altering input df
-                df = df.drop('confidence', axis=1).copy() 
-    
+                df = df.drop('confidence', axis=1).copy()
+
     if fmt == 'indiv' and colors is not None:
         if isinstance(colors[0], str):
             # Convert named colors to rgba
@@ -106,17 +106,18 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
             colors=[]
             for color in named_colors:
                 colors.append(matplotlib.colors.to_rgba(color))
-        
+
     if fmt == 'cluster_avg':
-        # Check if confidence bounds were provided by counting 
+        # Check if confidence bounds were provided by counting
         # columns that end with "_conf"
         conf_cols = [col for col in df.columns if col[-5:] == '_conf']
         if len(conf_cols) > 0:
             cdf = df[conf_cols].copy()
             df = df.drop(conf_cols, axis=1).copy()
-            
+
     # Get number of parameters with sensitivity >= 1
-    np_sensitive = np.any((df.fillna(0).values >= 1), axis=1).sum()
+    na_mask = np.isnan(df.astype(float).values)
+    np_sensitive = np.sum(df.values[~na_mask] >= 1)
 
     # Figure out how many parameters to plot
     if isinstance(np_plot, str):
@@ -135,16 +136,16 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
 
     # Y-position of bars
     y_pos = np.arange(np_max_plot)
-    
+
     if fmt == 'mean' or fmt == 'max':
         # Sort so most sensitive params are on top
         df.sort_values(by=df.columns[0], ascending=False, inplace=True)
         data = df.values[:np_max_plot, :].squeeze()
         params = df.index.tolist() # Get list of params after sorting
-        
-        yticks = y_pos 
 
-        # Error bars (confidence interval); by default these are plotted, but of 
+        yticks = y_pos
+
+        # Error bars (confidence interval); by default these are plotted, but of
         # length 0 if confidence == False
         if confidence:
             xerr = cdf[df.index[:np_max_plot]].values/2
@@ -167,7 +168,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
             if np_max_plot > np_sensitive:
                 if np_sensitive > 0:
                     colors[np_sensitive] = [1, 1, 1, 1]
-                colors[np_sensitive+1:] = [0, 0, 1, 0.8] 
+                colors[np_sensitive+1:] = [0, 0, 1, 0.8]
 
         if figsize is None:
             fig_height = int(np_max_plot/2)
@@ -179,21 +180,21 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
 
     elif fmt == 'cluster_avg':
         n_clusters = df.shape[1]
-        
-        # Sort by mean sensitivity across clusters 
+
+        # Sort by mean sensitivity across clusters
         sort_df = df.mean(axis=1).sort_values(ascending=False)
         df = df.reindex(sort_df.index)
         params = df.index.tolist() # Get list of params after sorting
-        
+
         # Add error bars if confidence=True, otherwise set length to 0
         if confidence:
             xerr = cdf.loc[df.index, :].values
         else:
             xerr = df.loc[df.index, :].values*0
-        
+
         height = 1/(n_clusters+1)
         yticks = y_pos - (height*(n_clusters-1)/2)
-        
+
         if colors is None:
             colors = []
             cmap = matplotlib.cm.get_cmap('Set1')
@@ -204,20 +205,20 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         if figsize is None:
             fig_height = int(np_max_plot/2*1.5)
             figsize = (5, fig_height)
-            
+
         fig, ax = plt.subplots(figsize=figsize)
 
         # Add bars for each cluster
         for i in range(n_clusters):
-            ax.barh(y_pos - height*i, df.iloc[:np_max_plot, i], height=height, 
+            ax.barh(y_pos - height*i, df.iloc[:np_max_plot, i], height=height,
                     color=colors[i], edgecolor='k', label=df.columns.tolist()[i],
                     xerr=xerr[:np_max_plot, i])
         ax.legend()
-        
+
     elif fmt == 'bin_avg':
         n_bins = df.shape[1]
-        
-        # Sort by mean sensitivity across bins 
+
+        # Sort by mean sensitivity across bins
         sort_df = df.mean(axis=1).sort_values(ascending=False)
         df = df.reindex(sort_df.index)
         params = df.index.tolist()
@@ -236,38 +237,40 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         if figsize is None:
             fig_height = int(np_max_plot/2*1.5)
             figsize = (5, fig_height)
-            
+
         fig, ax = plt.subplots(figsize=figsize)
 
         for i in range(n_bins):
             width = df.iloc[:np_max_plot, i]
             left = df.iloc[:np_max_plot, :i].sum(axis=1)
-            b = ax.barh(y_pos, width=width, left=left, color=color_array[i], 
+            b = ax.barh(y_pos, width=width, left=left, color=color_array[i],
                         edgecolor='k')
-                
+
             # Increase linewidth for parameters that are sensitive
             for w in enumerate(width.tolist()):
                 if w[1] > 1:
                     b[w[0]].set_linewidth(2.5)
-        
+
     elif fmt == 'indiv':
         n_clusters, n_bins = df.columns.levshape
-        
+
         # Split df into sensitive and non-sensitive df's, sort each, then re-combine
         # Can't just sort on mean sensitivity, otherwise a sensitive parameter
-        # could get left out because its mean might not be within the top 
+        # could get left out because its mean might not be within the top
         # np_max_plot most sensitive, even though a single bin is >= 1
-        mask = np.any((df.fillna(0).values >= 1), axis=1)
-        sens = df[mask].copy()
-        nsens = df[~mask].copy()
+        sens_arr = df.copy()
+        na_mask = np.isnan(df.astype(float).values)
+        sens_arr[na_mask] = 0
+        sens_mask = np.any(sens_arr >= 1, axis=1)
+        sens = df[sens_mask].copy()
+        nsens = df[~sens_mask].copy()
         sort_sens = sens.mean(axis=1).sort_values(ascending=False)
         sens = sens.reindex(sort_sens.index)
         sort_nsens = nsens.mean(axis=1).sort_values(ascending=False)
         nsens = nsens.reindex(sort_nsens.index)
-        df = sens.append(nsens)
+        df = pd.concat((sens, nsens))
 
         params = df.index.tolist()
-        df.fillna(0, inplace=True)
         height = 1/(n_clusters+1)
         yticks = y_pos - (height*(n_clusters-1)/2)
 
@@ -277,8 +280,6 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
             for i in range(n_clusters):
                 colors.append(cmap(i))
 
-        idx = pd.IndexSlice
-                
         # Create color array by decreasing alpha channel for each bin
         color_array = np.zeros((n_clusters, n_bins, 4), dtype='float64')
         for i in range(n_clusters):
@@ -297,21 +298,21 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
                 y = y_pos - height*i
                 if j == n_bins - 1:
                     # Add label to last bin
-                    b = ax.barh(y, width=width, height=height, left=left, 
-                                color=color_array[i, j], edgecolor='k', 
+                    b = ax.barh(y, width=width, height=height, left=left,
+                                color=color_array[i, j], edgecolor='k',
                                 label=df.columns.tolist()[i*n_bins][0])
                 else:
-                    b = ax.barh(y, width=width, height=height, left=left, 
+                    b = ax.barh(y, width=width, height=height, left=left,
                                 color=color_array[i, j], edgecolor='k')
-                    
+
                 # Increase linewidth for parameters that are sensitive
                 for w in enumerate(width.tolist()):
                     if w[1] > 1:
                         b[w[0]].set_linewidth(2.5)
-        
+
         leg = ax.legend()
         # Ensure that linewidths in the legend are all 1.0 pt
-        for legobj in leg.legendHandles:
+        for legobj in leg.legend_handles:
             legobj.set_linewidth(1)
 
     # Add vertical line and tick labels
@@ -319,12 +320,13 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         ax.axvline(1, color='k', linestyle='--')
     ax.set(yticks=yticks, yticklabels=params[:np_max_plot], xlabel='Sensitivity')
     ax.invert_yaxis()
-    
+
     # Move xaxis label and ticks to top
     ax.xaxis.tick_top()
     ax.xaxis.set_label_position('top')
-        
+
     return fig, ax
+
 
 def get_param_idx(parameter, parameter_names, n_parameters):
     """Regardless of format given, get the index of a specific parameter,
