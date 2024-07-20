@@ -197,7 +197,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
 
         if colors is None:
             colors = []
-            cmap = matplotlib.cm.get_cmap('Set1')
+            cmap = plt.colormaps.get_cmap('Set1')
             for i in range(n_clusters):
                 colors.append(cmap(i))
 
@@ -226,7 +226,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         yticks = y_pos
 
         if colors is None:
-            cmap = matplotlib.cm.get_cmap('Set1')
+            cmap = plt.colormaps.get_cmap('Set1')
             colors = cmap(1)
 
         # Create color array by decreasing alpha channel for each bin
@@ -275,7 +275,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         yticks = y_pos - (height*(n_clusters-1)/2)
 
         if colors is None:
-            cmap = matplotlib.cm.get_cmap('Set1')
+            cmap = plt.colormaps.get_cmap('Set1')
             colors = []
             for i in range(n_clusters):
                 colors.append(cmap(i))
@@ -362,7 +362,7 @@ def plot_interact_cdf(parameters, labels, main_param, cond_param, cluster_names=
 
     if colors is None:
         colors = []
-        cmap = matplotlib.cm.get_cmap('Set1')
+        cmap = plt.colormaps.get_cmap('Set1')
         for i in range(n_clusters):
             colors.append(cmap(i))
 
@@ -602,7 +602,7 @@ def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
 
     if colors is None:
         colors = []
-        cmap = matplotlib.cm.get_cmap('Set1')
+        cmap = plt.colormaps.get_cmap('Set1')
         for i in range(n_clusters):
             colors.append(cmap(i))
 
@@ -701,7 +701,7 @@ def plot_pdf(parameters, labels, parameter, cluster_names=None, colors=None,
 
     if colors is None:
         colors = []
-        cmap = matplotlib.cm.get_cmap('Set1')
+        cmap = plt.colormaps.get_cmap('Set1')
         for i in range(n_clusters):
             colors.append(cmap(i))
 
