@@ -87,7 +87,8 @@ def interact_distance(cond_idx, parameters, clusters, thresholds, percentiles):
 
 
 def interact_boot_distance(cond_idx, parameters, clusters, thresholds, 
-                           percentiles, n_boots=3000, alpha=0.95):
+                           percentiles, n_boots=3000, alpha=0.95,
+                           progress=True):
     """For a single parameter, performs a resampling procedure that calculates
     the alpha-quantile of the L1-norm for each parameter given the conditional 
     parameter, each cluster and each bin.
@@ -105,6 +106,8 @@ def interact_boot_distance(cond_idx, parameters, clusters, thresholds,
         n_boots [int]: number of iterations to perform resampling. Default: 3000
         alpha [float]: alpha-quantile at which to evaluate L1-norm. Can be 
                 either [0, 1] (quantile) or [0, 100] (percentile)
+        progress [bool]: whether to display tqdm progress bar during calculation.
+                Default is True
     
     returns:
         boot_distances [array]: array of shape (n_parameters-1, n_clusters, 
@@ -115,9 +118,9 @@ def interact_boot_distance(cond_idx, parameters, clusters, thresholds,
     # Check alpha input and scale as needed
     if (alpha >= 0) & (alpha <= 1):
         pass
-    elif (alpha < 0):
+    elif alpha < 0:
         raise ValueError("alpha-percentile must be greater than zero")
-    elif (alpha > 100):
+    elif alpha > 100:
         raise ValueError("alpha-percentile must be between 0 and 100 inclusive")
     else:
         alpha = alpha / 100
@@ -130,7 +133,11 @@ def interact_boot_distance(cond_idx, parameters, clusters, thresholds,
     boot_distances = np.zeros((n_parameters, n_clusters, n_bins), dtype='float64')
 
     # Loop through each parameter, cluster and bin
-    for nc in tqdm(range(n_clusters), desc='Resampling parameter %d' % cond_idx, leave=False):
+    if progress:
+        iterator = tqdm(range(n_clusters), desc='Resampling parameter %d' % cond_idx, leave=False)
+    else:
+        iterator = range(n_clusters)
+    for nc in iterator:
         # Indices comprising this cluster
         c_idx = clusters[nc] 
         

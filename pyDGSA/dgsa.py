@@ -12,6 +12,7 @@ import pandas as pd
 from .interact_util import interact_distance, interact_boot_distance
 from tqdm.notebook import tqdm
 
+
 def cluster_cdf_distance(prior_cdf, cluster_parameters, percentiles=None):
     """Helper function to calculate the L1-norm distance between the prior 
     distribution of each parameter and the class-conditional distribution 
@@ -44,9 +45,9 @@ def cluster_cdf_distance(prior_cdf, cluster_parameters, percentiles=None):
 
 
 def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95, 
-         output='mean', cluster_names=None, confidence=False):
+         output='mean', cluster_names=None, confidence=False, progress=True):
     """Given a parameter set and clustered model responses, calculate the 
-    normalized model sensitivity to each parameters, without interactions.
+    normalized model sensitivity to each parameter, without interactions.
     
     params:
         parameters [array(float)]: array of shape (n_parameters, n_simulations) 
@@ -63,6 +64,10 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
         output [str]: whether to return the mean standardized sensitivity across 
                 clusters ('mean'), the max sensitivity across clusters ('max'), or 
                 the standardized sensitivity for each cluster ('cluster_avg').
+        cluster_names [list(str)]: list of cluster names. If not provided, will default
+                to ['Cluster 0', 'Cluster 1', ..., 'Cluster N']
+        progress [bool]: whether to display a tqdm progress bar during calculation.
+                Default is True.
     
     returns:
         df [DataFrame]: pandas dataframe containing the normalized sensitivity of 
@@ -117,7 +122,11 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
     boot_distances = np.zeros((n_boots, n_clusters, n_parameters))
 
     # Loop through n_boots
-    for nb in tqdm(range(n_boots)):
+    if progress:
+        iterator = tqdm(range(n_boots))
+    else:
+        iterator = range(n_boots)
+    for nb in iterator:
         # For each boot, generate random clusters the same size as our clusters
         # and calc cdf distance between those
         for i, cluster in clusters.items():
@@ -132,9 +141,9 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
             boot_parameters = parameters[boot_idx]
 
             # Calculate cdf distance for this random cluster
-            boot_distances[nb,i,:] = cluster_cdf_distance(prior_cdf, 
-                                                          boot_parameters, 
-                                                          percentiles=percentiles)
+            boot_distances[nb, i, :] = cluster_cdf_distance(prior_cdf,
+                                                            boot_parameters,
+                                                            percentiles=percentiles)
 
     # Get the nth quantile of all boots
     boot_quantiles = np.quantile(boot_distances, quantile, axis=0)
@@ -147,7 +156,7 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
     if confidence:
         dist_upper = np.quantile(boot_distances, 1, axis=0)
         dist_lower = np.quantile(boot_distances, quantile - (1-quantile),
-                                  axis=0)
+                                 axis=0)
         upper_bound = cluster_distances/dist_upper
         lower_bound = cluster_distances/dist_lower
         
@@ -194,7 +203,7 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
 
 def dgsa_interactions(parameters, labels, cond_parameters=None, n_bins=3, 
                       parameter_names=None, quantile=0.95, n_boots=3000,
-                      output='mean', confidence=False, cluster_names=None):
+                      output='mean', cluster_names=None, progress=True):
     """Given a parameter set, clustered model responses, and a list of 
     conditional parameters, calculate the sensitivity of each two-way 
     parameter interaction.
@@ -222,11 +231,15 @@ def dgsa_interactions(parameters, labels, cond_parameters=None, n_bins=3,
                     -'mean' returns in single column form with each individual
                     interaction spelled out in the indices (e.g., 'x | y')
                     -'cluster_avg' returns the average sensitivity for each
-                    each cluster, without bin-specific values
+                    cluster, without bin-specific values
                     -'bin_avg' returns the average sensitivity for each bin,
                     without cluster-specific values
                     -'indiv' returns the sensitivity for each bin/cluster 
                     combination. No averaging is performed.
+        cluster_names [list(str)]: list of cluster names. If not provided, will
+                default to ['Cluster 0', 'Cluster 1', ..., 'Cluster N']
+        progress [bool]: whether to display a tqdm progress bar during calculation.
+                Default is True.
                     
     
     returns:
@@ -245,7 +258,7 @@ def dgsa_interactions(parameters, labels, cond_parameters=None, n_bins=3,
         parameter_names = ['param{}'.format(i) for i in range(n_parameters)]
 
     if cond_parameters is None:
-        cond_parameters=parameter_names
+        cond_parameters = parameter_names
 
     if output not in ['mat', 'mean', 'cluster_avg', 'bin_avg', 'indiv']:
         raise ValueError("Output format must be 'mean', 'mat', 'indiv', 'bin_avg', or 'cluster_avg'")
@@ -271,7 +284,7 @@ def dgsa_interactions(parameters, labels, cond_parameters=None, n_bins=3,
     # thresholds is of shape (n_bins, n_parameters)
     thresholds = np.quantile(parameters, [b/n_bins for b in range(1, n_bins)], 
                              axis=0)
-    percentiles = np.arange(1,100)
+    percentiles = np.arange(1, 100)
     
     # NaN-filled arrays of L1 distances and alpha-quantile L1 distances
     param_interact = np.empty((n_cond_parameters, n_parameters-1, n_clusters, 
@@ -281,14 +294,19 @@ def dgsa_interactions(parameters, labels, cond_parameters=None, n_bins=3,
                               n_bins), dtype='float64')
     boot_interact[:] = np.nan
     
-    # Loop through each conditional parameter and calculate 
-    for i, cond_idx in enumerate(tqdm(cond_parameter_idx, 
-                                      desc='Performing DGSA')):
+    # Loop through each conditional parameter and calculate
+    if progress:
+        iterator = tqdm(cond_parameter_idx, desc='Performing DGSA')
+    else:
+        iterator = cond_parameter_idx
+
+    for i, cond_idx in enumerate(iterator):
         param_interact[i] = interact_distance(cond_idx, parameters, clusters, 
-                                                thresholds, percentiles)
+                                              thresholds, percentiles)
         boot_interact[i] = interact_boot_distance(cond_idx, parameters, clusters, 
-                                                    thresholds, percentiles, 
-                                                    n_boots=n_boots, alpha=quantile)
+                                                  thresholds, percentiles,
+                                                  n_boots=n_boots, alpha=quantile,
+                                                  progress=progress)
     
     # Calculate the normalized distances (d/d_95)
     normalized_interactions = param_interact/boot_interact
