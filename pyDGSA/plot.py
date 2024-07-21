@@ -20,6 +20,7 @@ import matplotlib
 from sklearn.manifold import MDS
 from scipy.stats import gaussian_kde
 
+
 def reformat_interactions(df):
     """Given a dataframe with columns 'k1 | k2', output a dataframe with
     main parameters as the columns and conditional parameters as the rows."""
@@ -141,7 +142,7 @@ def vert_pareto_plot(df, np_plot='+5', fmt=None, colors=None, confidence=False,
         # Sort so most sensitive params are on top
         df.sort_values(by=df.columns[0], ascending=False, inplace=True)
         data = df.values[:np_max_plot, :].squeeze()
-        params = df.index.tolist() # Get list of params after sorting
+        params = df.index.tolist()  # Get list of params after sorting
 
         yticks = y_pos
 
