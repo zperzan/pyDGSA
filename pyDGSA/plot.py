@@ -590,6 +590,8 @@ def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
         legend_names [list(str)]: ordered list of names to display in the 
                 legend. Optional, but must be a permuted version of 
                 cluster_names.
+        plot_prior [bool]: whether to plot the prior distribution of the
+                parameter. Optional, defaults to False.
                 
         
     returns:
