@@ -10,7 +10,7 @@ interact_distance
 """
 
 import numpy as np
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 
 def interact_distance(cond_idx, parameters, clusters, thresholds, percentiles):

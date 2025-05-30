@@ -10,7 +10,7 @@ dgsa_interactions
 import numpy as np
 import pandas as pd
 from .interact_util import interact_distance, interact_boot_distance
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 
 def cluster_cdf_distance(prior_cdf, cluster_parameters, percentiles=None):
@@ -45,7 +45,8 @@ def cluster_cdf_distance(prior_cdf, cluster_parameters, percentiles=None):
 
 
 def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95, 
-         output='mean', cluster_names=None, confidence=False, progress=True):
+         output='mean', cluster_names=None, confidence=False, progress=True,
+         replace=False):
     """Given a parameter set and clustered model responses, calculate the 
     normalized model sensitivity to each parameter, without interactions.
     
@@ -68,6 +69,12 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
                 to ['Cluster 0', 'Cluster 1', ..., 'Cluster N']
         progress [bool]: whether to display a tqdm progress bar during calculation.
                 Default is True.
+        replace [bool]: whether to sample with replacement when generating bootstrapped
+                datasets. Default is False. Note that the original DGSA package (Park et
+                al., Computers & Geosciences, 2016) did not use replacement when sampling,
+                so the default option here is consistent with that original package. See:
+                https://github.com/SCRFpublic/DGSA/blob/f781012291c43e00e1ffea185abfec6ef852b0ab/DGSA_computations/BootstrapMainFactors.m#L41
+
     
     returns:
         df [DataFrame]: pandas dataframe containing the normalized sensitivity of 
@@ -135,9 +142,9 @@ def dgsa(parameters, labels, parameter_names=None, n_boots=3000, quantile=0.95,
             cluster = cluster.squeeze()
 
             # Generate random indices of size equal to that of the current cluster
-            boot_idx = np.random.choice(np.arange(parameters.shape[0]), 
+            boot_idx = np.random.choice(np.arange(parameters.shape[0]),
                                         size=len(cluster), 
-                                        replace=False)
+                                        replace=replace)
             boot_parameters = parameters[boot_idx]
 
             # Calculate cdf distance for this random cluster
