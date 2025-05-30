@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyDGSA"
-version = "1.0.7"
+version = "1.0.8"
 description = "Python implementation of distance-based generalized sensitivity analysis (DGSA)"
 authors = ["zperzan <zach.perzan@unlv.edu>"]
 license = "GPL-3.0-or-later"
