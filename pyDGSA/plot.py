@@ -19,7 +19,7 @@ import pandas as pd
 import matplotlib
 from sklearn.manifold import MDS
 from scipy.stats import gaussian_kde
-
+from tqdm.auto import tqdm
 
 def reformat_interactions(df):
     """Given a dataframe with columns 'k1 | k2', output a dataframe with
@@ -566,39 +566,48 @@ def interaction_matrix(df, figsize=(5,5), fontsize=12, nan_color='gray'):
     return fig, ax
 
 
-def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None, 
+def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
              figsize=(5,5), parameter_names=None, legend_names=None,
-             plot_prior=False):
+             plot_prior=False, plot_boots=False, n_boots=300,
+             progress=False):
     """Plot the class-conditional cdf for a single parameter.
-    
+
     params:
-        parameters [array(float)]: array of shape (n_parameters, n_simulations) 
+        parameters [array(float)]: array of shape (n_parameters, n_simulations)
                 containing the parameter sets used for each model run
-        labels [array(int)]: array of length n_simulations where each value 
+        labels [array(int)]: array of length n_simulations where each value
                 represents the cluster to which that model belongs
-        parameter [int]: index of the parameter to plot, corresponding to a 
+        parameter [int]: index of the parameter to plot, corresponding to a
                 column within `parameters`
         cluster_names [list(str)]: ordered list of cluster names corresponding
                 to the label array, ie the 0th element of cluster_names is the
-                name of the cluster where labels==0. Optional, default is 
+                name of the cluster where labels==0. Optional, default is
                 ['Cluster 0', 'Cluster 1', ...]
         colors [list]: colors to plot
-        figsize [tuple(float)]: matplotlib figure size in inches. Optional, 
+        figsize [tuple(float)]: matplotlib figure size in inches. Optional,
                 default: (5,5)
-        parameter_name [str]: name of the parameter as listed on the x-axis 
+        parameter_name [str]: name of the parameter as listed on the x-axis
                 label. Optional, defaults to 'Parameter #'
-        legend_names [list(str)]: ordered list of names to display in the 
-                legend. Optional, but must be a permuted version of 
+        legend_names [list(str)]: ordered list of names to display in the
+                legend. Optional, but must be a permuted version of
                 cluster_names.
         plot_prior [bool]: whether to plot the prior distribution of the
                 parameter. Optional, defaults to False.
-                
-        
+        plot_bootstrap [bool]: whether to plot the bootstrapped distributions
+                of the parameter. Note that this option re-calculates the
+                bootstrapped distributions simply for plotting purposes,
+                and they are not the same as the bootstrapped datasets used
+                in the `dgsa` function. Optional, defaults to False.
+        n_boots [int]: number of bootstrap samples to use if `plot_bootstrap`
+                is True. Optional, defaults to 300.
+        progress [bool]: whether to show a progress bar when calculating
+                bootstrapped distributions. Optional, defaults to False.
+
     returns:
         fig: matplotlib figure handle
         ax: matplotlib axis handle
     """
-    
+
     # Check input
     n_clusters = labels.max() + 1
     n_parameters = parameters.shape[1]
@@ -611,7 +620,7 @@ def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
 
     if cluster_names is None:
         cluster_names = ['Cluster %s' %i for i in range(n_clusters)]
-    
+
     # If parameter is given as string, look for it in parameter_names
     if isinstance(parameter, str):
         if parameter_names is None:
@@ -621,29 +630,48 @@ def plot_cdf(parameters, labels, parameter, cluster_names=None, colors=None,
             raise ValueError('Could not find %s in parameter_names' % parameter)
         else:
             param_idx = parameter_names.index(parameter)
-            
+
     elif isinstance(parameter, int):
         if parameter > (n_parameters - 1):
             raise ValueError('Parameter index passed (%s) is greater than the \
                              length of parameter_names' % parameter)
         else:
             param_idx = parameter
-        
+
     if parameter_names is None:
         parameter_names = ['Parameter %s' %i for i in range(n_parameters)]
-    
+
     # Get list of parameters (used for labeling with full col name)
     percentiles = np.arange(1, 100)
 
     fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
 
+    if plot_boots:
+        added_label = False
+        if progress:
+            iterator = tqdm(range(n_boots))
+        else:
+            iterator = range(n_boots)
+        for nb in iterator:
+            for i in range(n_clusters):
+                cluster_size = np.sum(labels == i)
+                boot_idx = np.random.choice(np.arange(parameters.shape[0]),
+                                            size=cluster_size, replace=False)
+                x = np.percentile(parameters[boot_idx, param_idx], percentiles)
+                if not added_label:
+                    ax.plot(x, percentiles, color='k', alpha=0.1,
+                            label='$F$ ($X_i$) bootstrapped')
+                    added_label = True
+                else:
+                    ax.plot(x, percentiles, color='0.5', alpha=0.1)
+
     if plot_prior:
-        ax.plot(np.percentile(parameters[:, param_idx], percentiles), 
-                    percentiles, color='k', linestyle='--', label='$F$ ($X_i$)')
+        ax.plot(np.percentile(parameters[:, param_idx], percentiles),
+                percentiles, color='k', linestyle='--', label='$F$ ($X_i$)')
 
     for i in range(n_clusters):
         x = np.percentile(parameters[np.where(labels==i), param_idx], percentiles)
-        ax.plot(x, percentiles, color=colors[i], 
+        ax.plot(x, percentiles, color=colors[i],
                 label='$F$ ($X_i$ | %s)' % cluster_names[i])
 
     ax.set(xlabel=parameter_names[param_idx], ylabel='% of simulations')
