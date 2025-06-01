@@ -5,3 +5,5 @@ dist/
 benchmarking
 .idea/
 .tox
+_build
+sandbox.ipynb
