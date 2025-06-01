@@ -83,6 +83,7 @@ unfixable = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D"]  # Ignore docstring errors in tests
+"docs/*" = ["D"]  # Ignore docstring errors in docs
 "__init__.py" = ["D"]  # Ignore docstring errors in __init__.py
 
 [tool.ruff.lint.pydocstyle]

@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'pyDGSA'
-copyright = '2025, Zach Perzan'
-author = 'Zach Perzan'
-release = '1.0.8'
+project = "pyDGSA"
+copyright = "2025, Zach Perzan"
+author = "Zach Perzan"
+release = "1.0.8"
 
 # -- General configuration ---------------------------------------------------
 
