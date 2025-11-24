@@ -91,7 +91,7 @@ def interact_distance(cond_idx, parameters, clusters, thresholds, percentiles):
 
 
 def interact_boot_distance(
-    cond_idx, parameters, clusters, thresholds, percentiles, n_boots=3000, alpha=0.95, progress=True
+    cond_idx, parameters, clusters, thresholds, percentiles, confidence=False, n_boots=3000, alpha=0.95, progress=True
 ):
     """For a single parameter, performs a resampling procedure that calculates
     the alpha-quantile of the L1-norm for each parameter given the conditional
@@ -113,6 +113,8 @@ def interact_boot_distance(
         at which to separate each conditional parameter
     percentiles : ndarray
         An array of percentiles at which to evaluate cdf
+    confidence : bool
+        Whether to calculate confidence intervals via bootstrapping
     n_boots : int
         The number of iterations to perform bootstrapping for hypothesis testing.
         Optional, default is 3000
@@ -145,6 +147,12 @@ def interact_boot_distance(
     n_clusters = len(clusters)
 
     boot_distances = np.zeros((n_parameters, n_clusters, n_bins), dtype="float64")
+
+    # If confidence intervals are requested, instantiate array for upper/lower distances
+    # Currently, this only works for output type "mean"
+    if confidence:
+        dist_upper = np.zeros((n_parameters, n_clusters, n_bins), dtype="float64")
+        dist_lower = np.zeros((n_parameters, n_clusters, n_bins), dtype="float64")
 
     # Loop through each parameter, cluster and bin
     if progress:
@@ -189,8 +197,15 @@ def interact_boot_distance(
 
                 boot_dist[:, cond_idx] = np.nan
                 boot_distances[:, nc, nb] = np.quantile(boot_dist, alpha, axis=0)
+                if confidence:
+                    dist_upper[:, nc, nb] = np.quantile(boot_dist, 1, axis=0)
+                    dist_lower[:, nc, nb] = np.quantile(boot_dist, alpha - (1 - alpha), axis=0)
 
     # Delete row of zeros (parameter conditioned on itself) from array
     boot_distances = np.delete(boot_distances, cond_idx, axis=0)
-
-    return boot_distances
+    if confidence:
+        dist_lower = np.delete(dist_lower, cond_idx, axis=0)
+        dist_upper = np.delete(dist_upper, cond_idx, axis=0)
+        return boot_distances, dist_lower, dist_upper
+    else:
+        return boot_distances

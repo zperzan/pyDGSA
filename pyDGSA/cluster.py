@@ -171,6 +171,9 @@ class KMedoids(object):
         The tolerance at which to stop the iterations, in percentage. For example,
         if tol=0.01, then the iterations will stop when the cost function decrease
         is less than 1%. Optional, defaults to 1e-4.
+    random_state : int or None
+        Seed for random number generator. If None, the random number generator
+        is not seeded.
 
     Methods
     -------

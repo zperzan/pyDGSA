@@ -180,6 +180,7 @@ def dgsa(
 
     # Calculate the confidence interval, if requested
     if confidence:
+        # Each distance is of the shape (n_clusters, n_parameters)
         dist_upper = np.quantile(boot_distances, 1, axis=0)
         dist_lower = np.quantile(boot_distances, quantile - (1 - quantile), axis=0)
         upper_bound = cluster_distances / dist_upper
@@ -233,6 +234,7 @@ def dgsa_interactions(
     n_bins=3,
     parameter_names=None,
     quantile=0.95,
+    confidence=False,
     n_boots=3000,
     output="mean",
     cluster_names=None,
@@ -266,6 +268,9 @@ def dgsa_interactions(
     quantile : float
         Quantile used to test the null hypothesis. Can specify as a percentile
         [0-100] or quantile [0-1]. Optional, defaults to 0.95
+    confidence : bool
+        Whether to output confidence intervals on the standardized sensitivity
+        measure. Optional, default is False.
     output : str
         Format in which to return sensitivities. Must be either 'mat', 'mean',
         'cluster_avg', 'bin_avg', or 'indiv'. 'mat' returns sensitivities in
@@ -333,6 +338,12 @@ def dgsa_interactions(
     boot_interact = np.empty((n_cond_parameters, n_parameters - 1, n_clusters, n_bins), dtype="float64")
     boot_interact[:] = np.nan
 
+    if confidence:
+        dist_lower = np.empty((n_cond_parameters, n_parameters - 1, n_clusters, n_bins), dtype="float64")
+        dist_lower[:] = np.nan
+        dist_upper = np.empty((n_cond_parameters, n_parameters - 1, n_clusters, n_bins), dtype="float64")
+        dist_upper[:] = np.nan
+
     # Loop through each conditional parameter and calculate
     if progress:
         iterator = tqdm(cond_parameter_idx, desc="Performing DGSA")
@@ -341,9 +352,16 @@ def dgsa_interactions(
 
     for i, cond_idx in enumerate(iterator):
         param_interact[i] = interact_distance(cond_idx, parameters, clusters, thresholds, percentiles)
-        boot_interact[i] = interact_boot_distance(
-            cond_idx, parameters, clusters, thresholds, percentiles, n_boots=n_boots, alpha=quantile, progress=progress
-        )
+        if confidence:
+            boot_interact[i], dist_lower[i], dist_upper[i] = interact_boot_distance(
+                cond_idx, parameters, clusters, thresholds, percentiles,
+                confidence=confidence, n_boots=n_boots, alpha=quantile, progress=progress
+            )
+        else:
+            boot_interact[i] = interact_boot_distance(
+                cond_idx, parameters, clusters, thresholds, percentiles,
+                n_boots=n_boots, alpha=quantile, progress=progress
+            )
 
     # Calculate the normalized distances (d/d_95)
     normalized_interactions = param_interact / boot_interact
@@ -357,6 +375,10 @@ def dgsa_interactions(
     # Average over each cluster and bin
     sensitivity_over_class = np.nanmean(sensitivity_per_class, axis=2)
 
+    if confidence:
+        upper_bound = param_interact / dist_upper
+        lower_bound = param_interact / dist_lower
+
     ### Choose how to output the results
     # Output mean sensitvitiy as df, with indices as interactions (e.g., 'x | y')
     if output == "mean":
@@ -368,6 +390,11 @@ def dgsa_interactions(
             for j, main_param in enumerate(main_params):
                 interact_name = main_param + " | " + cond_param
                 df.loc[interact_name, "sensitivity"] = sensitivity_over_class[i, j]
+
+                if confidence:
+                    conf = np.nanmean(lower_bound[i, j, :, :]) - np.nanmean(upper_bound[i, j, :, :])
+                    df.loc[interact_name, "confidence"] = conf
+
         df.sort_values(by="sensitivity", ascending=False, inplace=True)
 
     # Output mean sensitivity in array form, with rows as cond params and
