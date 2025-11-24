@@ -183,12 +183,15 @@ class KMedoids(object):
     >>> medoids, cluster_id = model.fit_predict(x)
     """
 
-    def __init__(self, n_clusters, max_iter=10000, tol=0.005):
+    def __init__(self, n_clusters, max_iter=10000, tol=0.005, random_state=None):
         self.costs_itr = None
         self.cluster_centers_ = None
         self.n_clusters = n_clusters
         self.max_iter = max_iter
         self.tol = tol
+
+        if random_state is not None:
+            np.random.seed(random_state)
 
     def fit_predict(self, x):
         """Run the main k-medoids function

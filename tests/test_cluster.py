@@ -17,8 +17,11 @@ def test_kmedoids_run():
     assert all(isinstance(cluster, np.ndarray) for cluster in clusters)
 
 def test_kmedoids_class():
-    model = KMedoids(n_clusters=2, max_iter=10, tol=0.1)
+    model = KMedoids(n_clusters=2, max_iter=10, tol=0.1, random_state=0)
     dist_matrix = np.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
     labels, medoids = model.fit_predict(dist_matrix)
     assert len(medoids) == 2
     assert len(labels) == dist_matrix.shape[0]
+    assert labels[0] == 0
+    assert labels[1] == 1
+    assert labels[2] == 1
